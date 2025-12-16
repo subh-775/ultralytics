@@ -1943,3 +1943,51 @@ class SAVPE(nn.Module):
         aggregated = score.transpose(-2, -3) @ x.reshape(B, self.c, C // self.c, -1).transpose(-1, -2)
 
         return F.normalize(aggregated.transpose(-2, -3).reshape(B, Q, -1), dim=-1, p=2)
+
+
+# CBAM Attention Module
+class CBAM(nn.Module):
+    """Convolutional Block Attention Module."""
+    def __init__(self, c1, kernel_size=7):
+        super().__init__()
+        self.channel_attention = ChannelAttention(c1)
+        self.spatial_attention = SpatialAttention(kernel_size)
+
+    def forward(self, x):
+        return self.spatial_attention(self.channel_attention(x))
+
+class ChannelAttention(nn.Module):
+    """Channel-attention module."""
+    def __init__(self, c1, ratio=16):
+        super().__init__()
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.max_pool = nn.AdaptiveMaxPool2d(1)
+        # Shared MLP
+        self.fc = nn.Sequential(
+            nn.Conv2d(c1, c1 // ratio, 1, bias=False),
+            nn.ReLU(),
+            nn.Conv2d(c1 // ratio, c1, 1, bias=False)
+        )
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        avg_out = self.fc(self.avg_pool(x))
+        max_out = self.fc(self.max_pool(x))
+        out = avg_out + max_out
+        return x * self.sigmoid(out)
+
+class SpatialAttention(nn.Module):
+    """Spatial-attention module."""
+    def __init__(self, kernel_size=7):
+        super().__init__()
+        assert kernel_size in (3, 7), 'kernel size must be 3 or 7'
+        padding = 3 if kernel_size == 7 else 1
+        self.conv1 = nn.Conv2d(2, 1, kernel_size, padding=padding, bias=False)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        avg_out = torch.mean(x, dim=1, keepdim=True)
+        max_out, _ = torch.max(x, dim=1, keepdim=True)
+        x = torch.cat([avg_out, max_out], dim=1)
+        x = self.conv1(x)
+        return x * self.sigmoid(x)
