@@ -22,7 +22,7 @@ backbone:
 
 
 # take o/p of layer 8 (1024 channels) and refine it
-  - [-1, 1, CBAM, [1024]] # 9 - Refined Features
+  - [-1, 1, CBAM, [7]] # 9 - Refined Features
 
 # YOLO12n head
 head:
